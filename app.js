@@ -238,7 +238,7 @@ const optObras = (cid, sel) => `<option value="">Seleccione a obra…</option>` 
 function rota() { return (location.hash || '#painel').slice(1); }
 const utilizadorActual = () => S.utilizadores.find(u => u.user === S.sessao && u.activo);
 function mostrarLogin() {
-  $('#app').hidden = true; $('#login').hidden = false; fecharModal();
+  $('#app').hidden = true; $('#login').hidden = false; fecharModal(); T = null; desenharTour();
   $('#loginBrand').textContent = S.empresa.nome.replace(/,? ?Lda\.?$/, '');
   $('#demoUsers').innerHTML = S.utilizadores.filter(u => u.activo).map(u =>
     `<button type="button" onclick="preencherLogin('${esc(u.user)}')"><span><b>${esc(NOME_PERFIL[u.perfil])}</b> · ${esc(u.nome)}</span><code>${esc(u.user)} / ${esc(u.pass)}</code></button>`).join('');
@@ -256,7 +256,7 @@ function entrar(e) {
   S.sessao = u.user; S.perfil = u.perfil; guardar();
   $('#lPass').value = ''; $('#loginErr').textContent = '';
   location.hash = '#painel'; render();
-  toast(`Bem-vindo(a), ${u.nome}.`);
+  if (!(S.tourVisto || {})[u.user]) iniciarTutorial(); else toast(`Bem-vindo(a), ${u.nome}.`);
 }
 function sair() { S.sessao = null; S.perfil = null; guardar(); history.replaceState(null, '', location.pathname); mostrarLogin(); }
 
@@ -278,6 +278,7 @@ function render() {
   const views = { painel: vPainel, cotacoes: vCotacoes, clientes: vClientes, guias: vGuias, faturas: vFaturas, relatorios: vRelatorios, artigos: vArtigos, config: vConfig };
   $('#main').innerHTML = r.startsWith('obra-') ? vObra(r.slice(5)) : views[base]();
   $('#main').scrollTop = 0;
+  desenharTour();
 }
 function salvarERender() { guardar(); render(); }
 
@@ -814,11 +815,122 @@ function gravarUtilizador() {
 }
 function repor() {
   modal('Repor dados de exemplo', '<p style="margin:0">Apaga tudo o que foi criado durante a demonstração e volta aos dados iniciais.</p>',
-    `<button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn pri" onclick="const s=S.sessao;S=dadosExemplo();S.sessao=s;guardar();fecharModal();render();toast('Dados repostos.')">Repor</button>`);
+    `<button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn pri" onclick="const s=S.sessao,t=S.tourVisto;S=dadosExemplo();S.sessao=s;S.tourVisto=t;guardar();fecharModal();render();toast('Dados repostos.')">Repor</button>`);
+}
+
+/* ---------------- Tutorial do primeiro login ---------------- */
+let T = null; // { passos, i }
+const PERFIL_DESC = {
+  admin: 'Tem acesso a todo o sistema: artigos e preços, cotações, guias, faturas, relatórios e configurações.',
+  apontador: 'Trata do material que sai e entra: emite as guias de entrega e regista as devoluções, danos e perdas.',
+  faturacao: 'Trata das cotações, das faturas e dos relatórios de faturação.'
+};
+function passosTutorial() {
+  const eu = utilizadorActual(), perfil = eu.perfil;
+  const obraEx = S.obras.find(o => pecasNaObra(o.id) > 0) || S.obras[0];
+  const todos = [
+    { titulo: `Bem-vindo(a), ${eu.nome.split(' ')[0]}`,
+      texto: `Este tutorial mostra, tela a tela, o que pode fazer no sistema. Entrou como <b>${NOME_PERFIL[perfil]}</b>. ${PERFIL_DESC[perfil]}`,
+      itens: ['<b>Cotação</b>: o interessado pede preço e fica registado só pelo nome.', '<b>Aprovação</b>: o interessado passa a cliente e escolhe-se a obra.', '<b>Guia de entrega</b>: o material sai para a obra e a fatura é emitida.', '<b>Devolução</b>: o material volta e o sistema faz o acerto pelos dias reais.', '<b>Relatórios</b>: consulta da faturação por período, cliente e obra.'],
+      dica: 'Use os botões Seguinte e Anterior, ou as setas do teclado. Pode sair a qualquer momento.' },
+    { rota: 'painel', alvos: ['#nav'], titulo: 'Menu',
+      texto: 'O menu à esquerda dá acesso às telas do sistema. Só aparecem as telas permitidas para o seu perfil.',
+      itens: ['Em baixo, no menu, vê o seu nome e perfil.', 'O botão <b>Tutorial</b> abre este guia outra vez.', 'O botão <b>Sair</b> termina a sessão.'] },
+    { rota: 'painel', alvos: ['.main .grid.g4'], titulo: 'Painel',
+      texto: 'É a primeira tela depois do login. Resume a situação do material e da faturação no dia de hoje.',
+      itens: ['<b>Peças alugadas</b>: quantas peças estão fora do armazém.', '<b>Obras com material</b>: obras que ainda têm peças no local.', '<b>Faturado este mês</b> e <b>cotações pendentes</b> de resposta.', 'Mais abaixo: a ocupação do parque por artigo e os últimos movimentos. Toque numa guia para a abrir.'],
+      dica: perfil === 'apontador' ? 'Daqui pode emitir uma guia de entrega ou registar uma devolução sem mudar de tela.' : 'Os botões no topo são atalhos para as tarefas mais frequentes.' },
+    { rota: 'cotacoes', alvos: ['.main .card'], titulo: 'Cotações',
+      texto: 'Aqui registam-se os pedidos de preço. O interessado não fica na lista de clientes enquanto a cotação não for aprovada.',
+      itens: ['<b>Nova cotação</b>: indique o nome, o local previsto, os dias e os artigos. O valor estimado é calculado logo.', '<b>Aprovar</b>: preenche os dados completos do cliente (particular ou empresa) e escolhe a obra. A seguir abre a guia de entrega já preenchida.', '<b>Rejeitar</b>: fecha a cotação sem criar cliente.', '<b>Ver</b>: mostra a cotação pronta a imprimir.'],
+      dica: 'O número laranja no menu mostra quantas cotações aguardam resposta.' },
+    { rota: 'clientes', alvos: ['.main .card'], titulo: 'Clientes e obras',
+      texto: 'Cada cliente tem uma conta com uma ou mais obras. Cada obra é controlada à parte: tem o seu material, o seu saldo e as suas faturas.',
+      itens: ['Clientes <b>particulares</b> (nome, morada, contactos) e <b>empresas</b> (com NUIT e alvará).', 'Cada cartão de obra mostra as peças no local e o total faturado.', 'Toque numa obra para abrir a página dela.'] },
+    obraEx && { rota: 'obra-' + obraEx.id, alvos: ['.tabs'], titulo: 'Página da obra',
+      texto: `Exemplo: ${esc(obraEx.nome)}. Aqui vê tudo o que aconteceu nesta obra.`,
+      itens: ['<b>Mapa de movimentos</b>: cada entrega e devolução, com o saldo acumulado. Entregas somam, devoluções e perdas subtraem.', '<b>Inventário actual</b>: material que ainda está no local, por lote, com os dias decorridos.', '<b>Faturas da obra</b>: todas as faturas desta obra.', 'O mapa e o inventário podem ser impressos.'],
+      dica: perfil === 'faturacao' ? 'Útil para responder ao cliente quando pergunta o que ainda tem em obra.' : 'Os botões Nova entrega e Registar devolução já vêm com esta obra seleccionada.' },
+    { rota: 'guias', alvos: ['.main .head .actions'], titulo: 'Guias de entrega e devolução',
+      texto: 'É aqui que se controla o material que sai e entra no armazém.',
+      itens: ['<b>Nova guia de entrega</b>: escolha o cliente e a obra (obrigatória), a data de carregamento, a viatura, o motorista, o apontador e os artigos. O sistema não deixa sair mais do que há em armazém.', 'Ao emitir a guia, a <b>fatura da obra é criada automaticamente</b> pelos dias previstos.', '<b>Registar devolução</b>: indique as peças devolvidas, as danificadas, as perdidas e o valor de danos acordado.', 'Todas as guias imprimem-se em <b>duas vias</b>: uma para o cliente e outra para a empresa.'],
+      dica: perfil === 'apontador' ? 'Esta é a sua tela principal. Confira as quantidades antes de emitir: a guia altera o stock e o saldo da obra.' : 'Os filtros no topo separam entregas de devoluções.' },
+    { rota: 'faturas', alvos: ['.main .card'], titulo: 'Faturas',
+      texto: 'Uma fatura por obra e por movimento, sem IVA. Pode filtrar por cliente, obra e período.',
+      itens: ['<b>Aluguer</b>: emitida no levantamento, pelos dias previstos.', '<b>Acerto de devolução</b>: diferença entre os dias reais e os faturados, mais danos e perdas. Fica negativa se o material voltou antes do previsto.', 'Os dias não contam o dia de levantamento nem o de devolução: levantado a 1 e devolvido a 5 conta 3 dias.', 'Mais abaixo há um <b>simulador</b> para testar esta regra.'] },
+    { rota: 'relatorios', alvos: ['.main .grid.g2'], titulo: 'Relatórios',
+      texto: 'Mostra quanto foi faturado num período e a quem.',
+      itens: ['Escolha as datas ou toque num mês.', 'A tabela lista os clientes faturados e, por baixo de cada um, as suas obras.', 'O gráfico mostra a faturação por mês e o peso de cada cliente.', '<b>Imprimir relatório</b> gera a versão em papel.'] },
+    { rota: 'artigos', alvos: ['.main .card'], titulo: 'Inventário de artigos',
+      texto: 'Lista das peças da empresa. Cada medida é um artigo próprio, com código e preço diário.',
+      itens: ['Para cada artigo: <b>total</b>, <b>em armazém</b> e <b>alugada</b>. Os números mudam sozinhos com as guias.', 'O aviso <b>baixo</b> aparece quando resta menos de 20% em armazém.', 'Use as categorias no topo para filtrar.'],
+      dica: perfil === 'admin' ? 'Só o administrador cria artigos e altera preços. Um preço novo vale só para as próximas guias.' : 'Pode consultar o stock, mas só o administrador altera artigos e preços.' },
+    { rota: 'config', alvos: ['.main .card:last-child'], titulo: 'Configurações',
+      texto: 'Dados da empresa que saem nas guias e faturas, e a gestão de utilizadores.',
+      itens: ['Nome, NUIT, morada e contactos da empresa.', 'Dias previstos por omissão nas cotações e guias.', '<b>Utilizadores</b>: criar contas, escolher o perfil, desactivar quem já não usa o sistema.', '<b>Repor dados de exemplo</b> recomeça a demonstração.'] },
+    { titulo: 'Está pronto para começar',
+      texto: 'Pode rever este tutorial quando quiser no botão <b>Tutorial</b>, em baixo no menu.',
+      itens: perfil === 'apontador' ? ['Sugestão: abra <b>Guias</b> e registe a devolução de uma obra para ver o acerto a ser calculado.']
+        : perfil === 'faturacao' ? ['Sugestão: aprove uma das cotações pendentes e veja a fatura gerada.', 'Depois consulte o <b>Relatório</b> do mês.']
+        : ['Sugestão: aprove uma cotação pendente, emita a guia e depois registe a devolução.', 'Veja o resultado no mapa da obra e nas faturas.'] }
+  ].filter(Boolean);
+  return todos.filter(p => {
+    if (!p.rota) return true;
+    const base = p.rota.startsWith('obra-') ? 'clientes' : p.rota;
+    return MENU.find(m => m[0] === base)[2].includes(perfil);
+  });
+}
+function iniciarTutorial() { fecharModal(); T = { passos: passosTutorial(), i: 0 }; irPasso(0); }
+function irPasso(i) {
+  if (!T) return;
+  T.i = Math.max(0, Math.min(i, T.passos.length - 1));
+  const p = T.passos[T.i];
+  if (p.rota && rota() !== p.rota) location.hash = '#' + p.rota;
+  render();
+}
+function fimTutorial() {
+  if (!T) return;
+  T = null;
+  S.tourVisto = S.tourVisto || {}; S.tourVisto[S.sessao] = true; guardar();
+  desenharTour();
+}
+function desenharTour() {
+  document.querySelectorAll('.tour-hl').forEach(e => e.classList.remove('tour-hl'));
+  const root = $('#tourRoot');
+  if (!T) { root.innerHTML = ''; return; }
+  const p = T.passos[T.i], n = T.passos.length, ult = T.i === n - 1;
+  const alvos = (p.alvos || []).map(s => document.querySelector(s)).filter(Boolean);
+  alvos.forEach(el => { el.classList.add('tour-hl'); el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
+  const navAtivo = p.rota && document.querySelector('#nav a.on');
+  if (navAtivo && !alvos.length) navAtivo.classList.add('tour-hl');
+  if (navAtivo) navAtivo.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  root.innerHTML = `<div class="tour-backdrop"></div>
+  <div class="tour-card ${alvos.length ? '' : 'center'}" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
+    <div class="tour-nav"><span class="tour-step">Passo ${T.i + 1} de ${n}</span>${ult ? '' : '<button class="btn sm ghost" onclick="fimTutorial()">Saltar tutorial</button>'}</div>
+    <h2 id="tourTitle">${p.titulo}</h2>
+    <p>${p.texto}</p>
+    ${p.itens ? `<ul>${p.itens.map(x => `<li>${x}</li>`).join('')}</ul>` : ''}
+    ${p.dica ? `<div class="tour-tip">${p.dica}</div>` : ''}
+    <div class="tour-nav">
+      <div class="tour-dots" aria-hidden="true">${T.passos.map((_, k) => `<span class="${k === T.i ? 'on' : ''}"></span>`).join('')}</div>
+      <div class="actions">${T.i > 0 ? '<button class="btn" onclick="irPasso(T.i-1)">Anterior</button>' : ''}
+        <button class="btn pri" id="tourNext" onclick="${ult ? "fimTutorial();location.hash='#painel'" : 'irPasso(T.i+1)'}">${ult ? 'Começar a usar' : T.i === 0 ? 'Começar tutorial' : 'Seguinte'}</button></div>
+    </div>
+  </div>`;
+  $('#tourNext').focus({ preventScroll: true });
 }
 
 /* ---------------- Arranque ---------------- */
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#modalRoot').innerHTML) fecharModal(); });
+document.addEventListener('keydown', e => {
+  if (T) {
+    if (e.key === 'ArrowRight') irPasso(T.i + 1);
+    else if (e.key === 'ArrowLeft') irPasso(T.i - 1);
+    else if (e.key === 'Escape') fimTutorial();
+    return;
+  }
+  if (e.key === 'Escape' && $('#modalRoot').innerHTML) fecharModal();
+});
+$('#tutorialBtn').addEventListener('click', iniciarTutorial);
 $('#loginForm').addEventListener('submit', entrar);
 $('#logout').addEventListener('click', sair);
 window.addEventListener('hashchange', () => { if (!rota().startsWith('obra-')) window._to = 'mapa'; render(); });

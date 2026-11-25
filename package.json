@@ -1,0 +1,13 @@
+{
+  "name": "aluguer-andaimes-prototipo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Protótipo do Sistema de Gestão de Aluguer de Andaimes e Cofragem",
+  "scripts": {
+    "test": "node --test tests/regras.test.js",
+    "start": "npx --yes serve -l 5173 ."
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
