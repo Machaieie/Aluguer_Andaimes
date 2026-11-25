@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestão de Aluguer de Andaimes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="login-wrap" id="login" hidden>
+  <form class="login-card" id="loginForm" autocomplete="off">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#1c1600" stroke-width="2"><path d="M4 2v16M16 2v16M4 6h12M4 12h12M4 6l12 6"/></svg>
+      </div>
+      <div><div class="brand-name" id="loginBrand">Ferragem</div><div class="brand-sub">Gestão de aluguer de andaimes e cofragem</div></div>
+    </div>
+    <h1>Entrar no sistema</h1>
+    <div class="field"><label for="lUser">Utilizador</label><input id="lUser" required autocapitalize="none"></div>
+    <div class="field"><label for="lPass">Palavra-passe</label><input id="lPass" type="password" required></div>
+    <div class="login-err" id="loginErr" role="alert"></div>
+    <button class="btn pri" type="submit">Entrar</button>
+    <div class="demo-users">
+      <b>Utilizadores de demonstração</b> <span class="muted">(toque para preencher)</span>
+      <div id="demoUsers"></div>
+    </div>
+  </form>
+</div>
+<div class="app" id="app" hidden>
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#1c1600" stroke-width="2"><path d="M4 2v16M16 2v16M4 6h12M4 12h12M4 6l12 6"/></svg>
+      </div>
+      <div>
+        <div class="brand-name" id="brandName">Ferragem</div>
+        <div class="brand-sub">Andaimes e Cofragem</div>
+      </div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="profile">
+      <div class="who"><b id="userName"></b><span id="userRole"></span></div>
+      <button class="btn sm" id="logout" type="button">Sair</button>
+    </div>
+  </aside>
+  <main class="main" id="main"></main>
+</div>
+<div id="modalRoot"></div>
+<script src="app.js"></script>
+</body>
+</html>
